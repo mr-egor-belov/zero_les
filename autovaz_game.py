@@ -1,23 +1,21 @@
-# VAZAUTO GAME
-# игра на выживание с постоянным передвижением,
-# где на поле постоянно появляются “враги”,
-# которых нельзя касаться
-
 import pygame
 import random
 
 # Константы
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 600
+SCREEN_HEIGHT = 800
 FPS = 60
 CAR_SPEED = 5
 SCROLL_SPEED = 5
-OBSTACLE_SIZE = 50
+SCROLL_SPEED_BOOST = 15
+CAR_WIDTH = 50
+CAR_HEIGHT = 100
 MOTORCYCLE_SIZE = (30, 70)
 OIL_SPILL_SPEED = 3
-OIL_SPEED_BOOST = 15
 BOOST_DURATION = 300  # Frames
-SCROLL_SPEED_BOOST = 15
+LEVEL_UP_SCORE = 1000  # Очки для повышения уровня
+MAX_LEVEL = 10
+SCORE_BOOST_OIL = 500  # Очки за наезд на масляное пятно
 
 # Цвета
 WHITE = (255, 255, 255)
@@ -34,10 +32,20 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Car Arcade")
 clock = pygame.time.Clock()
 
+# Загрузка изображений
+CAR_IMAGE = pygame.image.load("car.png")
+CAR_IMAGE = pygame.transform.scale(CAR_IMAGE, (CAR_WIDTH, CAR_HEIGHT))
+OBSTACLE_IMAGE = pygame.image.load("obstacle.png")
+OBSTACLE_IMAGE = pygame.transform.scale(OBSTACLE_IMAGE, (CAR_WIDTH, CAR_HEIGHT))
+MOTORCYCLE_IMAGE = pygame.image.load("motorcycle.png")
+MOTORCYCLE_IMAGE = pygame.transform.scale(MOTORCYCLE_IMAGE, MOTORCYCLE_SIZE)
+OIL_SPILL_IMAGE = pygame.image.load("oil_spill.png")
+OIL_SPILL_IMAGE = pygame.transform.scale(OIL_SPILL_IMAGE, (CAR_WIDTH, CAR_HEIGHT // 2))
+
 # Класс для машинки игрока
 class Car:
     def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, 50, 100)
+        self.rect = pygame.Rect(x, y, CAR_WIDTH, CAR_HEIGHT)
         self.speed = CAR_SPEED
         self.boost_timer = 0
 
@@ -54,7 +62,6 @@ class Car:
             if self.boost_timer == 0:
                 global SCROLL_SPEED
                 SCROLL_SPEED = 5  # Сброс скорости игры
-                game.background_color = WHITE  # Сброс цвета фона
 
     def boost(self):
         global SCROLL_SPEED
@@ -62,56 +69,33 @@ class Car:
         self.boost_timer = BOOST_DURATION
 
     def draw(self, surface):
-        pygame.draw.rect(surface, BLUE, self.rect)
+        surface.blit(CAR_IMAGE, self.rect.topleft)
 
-# Класс для препятствий
-class Obstacle:
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, OBSTACLE_SIZE, OBSTACLE_SIZE)
-        self.speed = random.randint(3, 7)
-
-    def move(self):
-        self.rect.y += self.speed
-
-    def draw(self, surface):
-        pygame.draw.rect(surface, RED, self.rect)
-
-# Класс для мотоциклов
-class Motorcycle:
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, *MOTORCYCLE_SIZE)
-        self.speed = random.randint(6, 10)
+# Абстрактный класс для объектов на дороге
+class RoadObject:
+    def __init__(self, x, y, width, height, image, speed):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.image = image
+        self.speed = speed
 
     def move(self):
         self.rect.y += self.speed
 
     def draw(self, surface):
-        pygame.draw.rect(surface, YELLOW, self.rect)
-
-# Класс для масляного пятна
-class OilSpill:
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, OBSTACLE_SIZE, OBSTACLE_SIZE // 2)
-
-    def move(self):
-        self.rect.y += OIL_SPILL_SPEED
-
-    def draw(self, surface):
-        pygame.draw.rect(surface, GRAY, self.rect)
+        surface.blit(self.image, self.rect.topleft)
 
 # Класс для управления игрой
 class Game:
     def __init__(self):
-        self.car = Car(SCREEN_WIDTH // 2 - 25, SCREEN_HEIGHT - 120)
-        self.obstacles = []
-        self.motorcycles = []
-        self.oil_spills = []
+        self.car = Car(SCREEN_WIDTH // 2 - CAR_WIDTH // 2, SCREEN_HEIGHT - CAR_HEIGHT - 20)
+        self.road_objects = []
         self.running = True
         self.score = 0
         self.level = 1
         self.game_over = False
-        self.background_color = WHITE
         self.win = False
+        self.displayed_score_boost = False
+        self.score_boost_timer = 0
 
     def show_start_screen(self):
         screen.fill(WHITE)
@@ -159,31 +143,6 @@ class Game:
                     self.reset_game()
                     waiting = False
 
-    def show_win_screen(self):
-        screen.fill(WHITE)
-        font = pygame.font.SysFont(None, 72)
-        win_text = font.render("YOU WIN", True, GREEN)
-        screen.blit(win_text, (SCREEN_WIDTH // 2 - win_text.get_width() // 2, SCREEN_HEIGHT // 3))
-
-        font = pygame.font.SysFont(None, 36)
-        score_text = font.render(f"Your Score: {self.score}", True, BLACK)
-        screen.blit(score_text, (SCREEN_WIDTH // 2 - score_text.get_width() // 2, SCREEN_HEIGHT // 2))
-
-        restart_text = font.render("Press SPACE to Restart", True, BLACK)
-        screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + 50))
-
-        pygame.display.flip()
-
-        waiting = True
-        while waiting:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    exit()
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    self.reset_game()
-                    waiting = False
-
     def run(self):
         self.show_start_screen()
         while self.running:
@@ -204,86 +163,58 @@ class Game:
 
     def update(self):
         self.car.move()
-        self.update_obstacles()
-        self.update_motorcycles()
-        self.update_oil_spills()
+        self.update_road_objects()
 
-        for obstacle in self.obstacles[:]:
-            if self.car.rect.colliderect(obstacle.rect):
-                self.game_over = True
-
-        for motorcycle in self.motorcycles[:]:
-            if self.car.rect.colliderect(motorcycle.rect):
-                self.game_over = True
+        for road_object in self.road_objects[:]:
+            if self.car.rect.colliderect(road_object.rect):
+                if road_object.image == OIL_SPILL_IMAGE:
+                    self.score += SCORE_BOOST_OIL
+                    self.displayed_score_boost = True
+                    self.score_boost_timer = 30  # Показываем +500 на 30 кадров
+                    self.road_objects.remove(road_object)
+                else:
+                    self.game_over = True
 
         self.check_collisions()
-        self.score += 1
 
-        if self.score // 2000 + 1 > self.level:
-            self.level = self.score // 2000 + 1
+        # Повышение уровня каждые 1000 очков
+        if self.score // LEVEL_UP_SCORE + 1 > self.level:
+            self.level = self.score // LEVEL_UP_SCORE + 1
 
-        if self.level >= 10:
+        if self.score >= LEVEL_UP_SCORE * MAX_LEVEL:
             self.win = True
 
-    def update_obstacles(self):
-        for obstacle in self.obstacles[:]:
-            obstacle.move()
-            if obstacle.rect.top > SCREEN_HEIGHT:
-                self.obstacles.remove(obstacle)
+    def update_road_objects(self):
+        for road_object in self.road_objects[:]:
+            road_object.move()
+            if road_object.rect.top > SCREEN_HEIGHT:
+                self.road_objects.remove(road_object)
 
-        if random.randint(1, 50) == 1:
-            x = random.randint(0, SCREEN_WIDTH - OBSTACLE_SIZE)
-            self.obstacles.append(Obstacle(x, -OBSTACLE_SIZE))
+        if random.randint(1, 50 - self.level) == 1:
+            x = random.randint(0, SCREEN_WIDTH - CAR_WIDTH)
+            self.road_objects.append(RoadObject(x, -CAR_HEIGHT, CAR_WIDTH, CAR_HEIGHT, OBSTACLE_IMAGE, random.randint(3, 7)))
 
-    def update_motorcycles(self):
-        for motorcycle in self.motorcycles[:]:
-            motorcycle.move()
-            if motorcycle.rect.top > SCREEN_HEIGHT:
-                self.motorcycles.remove(motorcycle)
-
-        if random.randint(1, 100) == 1:
+        if random.randint(1, 100 - self.level * 5) == 1:
             x = random.randint(0, SCREEN_WIDTH - MOTORCYCLE_SIZE[0])
-            self.motorcycles.append(Motorcycle(x, -MOTORCYCLE_SIZE[1]))
-
-    def update_oil_spills(self):
-        for oil_spill in self.oil_spills[:]:
-            oil_spill.move()
-            if oil_spill.rect.top > SCREEN_HEIGHT:
-                self.oil_spills.remove(oil_spill)
-            if self.car.rect.colliderect(oil_spill.rect):
-                self.car.boost()
-                self.background_color = GRAY  # Меняем фон на серый при наезде на пятно
-                self.oil_spills.remove(oil_spill)
+            self.road_objects.append(RoadObject(x, -MOTORCYCLE_SIZE[1], MOTORCYCLE_SIZE[0], MOTORCYCLE_SIZE[1], MOTORCYCLE_IMAGE, random.randint(6, 10)))
 
     def check_collisions(self):
-        for obstacle in self.obstacles[:]:
-            for motorcycle in self.motorcycles[:]:
-                if obstacle.rect.colliderect(motorcycle.rect):
-                    self.create_oil_spill(obstacle.rect.center)
-                    self.obstacles.remove(obstacle)
-                    self.motorcycles.remove(motorcycle)
-
-        for i, obstacle in enumerate(self.obstacles):
-            for other_obstacle in self.obstacles[i + 1:]:
-                if obstacle.rect.colliderect(other_obstacle.rect):
-                    self.create_oil_spill(obstacle.rect.center)
-                    self.obstacles.remove(obstacle)
-                    self.obstacles.remove(other_obstacle)
+        for i, obj1 in enumerate(self.road_objects):
+            for j, obj2 in enumerate(self.road_objects):
+                if i != j and obj1.rect.colliderect(obj2.rect):
+                    # Создание масляного пятна на месте столкновения
+                    center_x = (obj1.rect.centerx + obj2.rect.centerx) // 2
+                    center_y = (obj1.rect.centery + obj2.rect.centery) // 2
+                    self.road_objects.append(RoadObject(center_x - CAR_WIDTH // 2, center_y - CAR_HEIGHT // 4, CAR_WIDTH, CAR_HEIGHT // 2, OIL_SPILL_IMAGE, OIL_SPILL_SPEED))
+                    self.road_objects.remove(obj1)
+                    self.road_objects.remove(obj2)
                     break
 
-    def create_oil_spill(self, position):
-        x, y = position
-        self.oil_spills.append(OilSpill(x - OBSTACLE_SIZE // 2, y - OBSTACLE_SIZE // 4))
-
     def draw(self):
-        screen.fill(self.background_color)  # Используем изменяемый фон
+        screen.fill(WHITE)
         self.car.draw(screen)
-        for obstacle in self.obstacles:
-            obstacle.draw(screen)
-        for motorcycle in self.motorcycles:
-            motorcycle.draw(screen)
-        for oil_spill in self.oil_spills:
-            oil_spill.draw(screen)
+        for road_object in self.road_objects:
+            road_object.draw(screen)
 
         font = pygame.font.SysFont(None, 36)
         level_text = font.render(f"Level: {self.level}", True, BLACK)
@@ -291,12 +222,18 @@ class Game:
         screen.blit(level_text, (10, 10))
         screen.blit(score_text, (10, 50))
 
+        if self.displayed_score_boost:
+            bonus_text = font.render("+500", True, GREEN)
+            screen.blit(bonus_text, (self.car.rect.centerx - 20, self.car.rect.top - 30))
+            self.score_boost_timer -= 1
+            if self.score_boost_timer <= 0:
+                self.displayed_score_boost = False
+
         pygame.display.flip()
 
     def reset_game(self):
         global SCROLL_SPEED
         SCROLL_SPEED = 5  # Сброс скорости игры
-        self.background_color = WHITE  # Сброс цвета фона
         self.__init__()
 
 # Основной запуск игры
